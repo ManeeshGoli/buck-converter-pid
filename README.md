@@ -65,7 +65,7 @@ The steady-state voltage error at fixed duty cycle is the direct motivation for 
 ## Project Status
 
 - [x] Design, simulation, and efficiency analysis complete
-- [ ] Arduino Timer1 PWM + PID implementation
+- [x] Arduino Timer1 PWM + PID implementation
 - [ ] Physical hardware build
 - [ ] Real-hardware measurement and demo
 
