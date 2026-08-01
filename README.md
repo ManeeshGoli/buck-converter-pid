@@ -1,60 +1,34 @@
-# Closed-Loop Digitally-Controlled Buck Converter
+# Buck Converter with Arduino PID Control
 
-A 12V-to-5V buck converter with Arduino-based PID closed-loop voltage regulation, direct Timer1 register-level PWM generation, and PSpice simulation validation prior to hardware implementation.
+I built a 12V-to-5V switching power converter from scratch — designed it, simulated it in PSpice, broke it a few times on a breadboard, fixed it, and got it running with real closed-loop feedback control. This README walks through the design, the math behind it, and honestly, a lot of the mistakes I made along the way, because I think those are just as worth documenting as the parts that worked.
 
-## Overview
+## Why I Built This
 
-Switching DC-DC step-down converter using a P-channel MOSFET high-side switch, NPN gate driver, and closed-loop PID control on an Arduino Uno. Switching frequency (31.25 kHz) is generated via direct Timer1 register configuration rather than `analogWrite()`, whose default PWM frequency (~490–980 Hz) is too slow for practical power conversion.
+I'm an EE sophomore at USF, and most of my prior work was simulation-only — I'd never actually built a power circuit with my own hands, dealt with a component overheating, or debugged something at 1am wondering why a capacitor just popped. I wanted a project that forced me to bridge circuit design, embedded programming, and control theory into something that actually exists as a physical object, not just a waveform on a screen.
 
-## Key Specifications
+A buck converter felt like the right scope: small enough to finish, but genuinely representative of what shows up in almost every piece of electronics you own — phone chargers, EV low-voltage systems, drone power distribution. And adding PID control on top of it meant I wasn't just building "a power supply," I was learning the same closed-loop feedback concept that shows up in robotics, motor control, and basically every mechatronics application.
+
+## What It Does
+
+Takes a 12V DC input and regulates it down to a steady 5V output, using a P-channel MOSFET as the switch, an Arduino Uno generating the switching signal, and a PID control loop reading the output and correcting it in real time.
+
+## Specs
 
 | Parameter | Value |
 |---|---|
 | Input voltage | 12V DC |
 | Target output voltage | 5V DC |
 | Switching frequency | 31.25 kHz |
-| Steady-state duty cycle (ideal) | ~41.7% |
-| Control method | Digital PID, ATmega328P |
+| Load | 10Ω resistor (stand-in for a real device) |
+| Control | Digital PID running on ATmega328P |
 
-## Circuit Design
+## The Design
 
-A P-channel high-side MOSFET was chosen over N-channel, since an N-channel switch in that position can't be fully driven by a 5V microcontroller pin once its source rises toward the input rail. Driven via an NPN low-side transistor, standard for microcontroller-level control.
+### Why a P-channel MOSFET, not the more common N-channel
 
-**Signal path:** Arduino PWM → base resistor → NPN driver → gate pull-up node → P-MOSFET gate → switch node → LC filter → output.
+This tripped me up early on. A high-side switch (which is what you need here) is easy to drive with an N-channel MOSFET *if* you have a gate driver IC or bootstrap circuit — but I wanted to drive it directly from the Arduino. The problem: once an N-channel MOSFET's source rises up near the 12V rail, a 5V gate signal isn't enough to keep it fully on. A P-channel MOSFET sidesteps this — I drive it through a small NPN transistor acting as a low-side switch, which flips the P-MOSFET's gate voltage relative to its source in the way that actually turns it on.
 
-**Key design decisions:**
-- Inductor (330µH) and output capacitor (100µF) sized via standard ripple-current/ripple-voltage formulas
-- Gate pull-up resistor reduced from 10kΩ to 1kΩ after diagnosing an RC timing issue preventing full MOSFET turn-off (see Debugging)
-- Decoupling capacitor (C2, 0.1µF) included for real-hardware switching noise suppression — shown to have no effect in idealized simulation, since ideal SPICE sources lack parasitic wiring inductance
-- 1N5819 Schottky diode specified for hardware; D1N4148 substituted in simulation due to library availability, expected to make simulated efficiency conservative vs. real hardware
-
-## Bill of Materials
-
-| Ref | Component | Value | Notes |
-|---|---|---|---|
-| V1 | DC supply | 12V, 2A | Wall adapter |
-| M1 | P-MOSFET | IRF9540N | High-side switch |
-| Q1 | NPN transistor | 2N2222A | Gate driver |
-| D3 | Schottky diode | 1N5819 | Flyback diode |
-| L1 | Inductor | 330µH, 5.2A | Toroidal |
-| C1 | Output cap | 100µF, 25V | Electrolytic |
-| C2 | Decoupling cap | 0.1µF | Ceramic |
-| R1 | Load | 10Ω | Test load |
-| R2 | Gate pull-up | 1kΩ | — |
-| R3 | Base resistor | 1kΩ | — |
-| — | Feedback divider | 10kΩ + 5.1kΩ | — |
-| — | MCU | Arduino Uno R3 | — |
-
-## Simulation Results
-
-Open-loop, fixed 41.7% duty cycle:
-
-| Metric | Result |
-|---|---|
-| Output voltage | ~6.19V (vs. 5V target) |
-| Efficiency | ~82.5% (Pout 3.838W / Pin ~4.65W) |
-
-The steady-state voltage error at fixed duty cycle is the direct motivation for closed-loop PID control. Full efficiency calculation methodology, including a measurement pitfall found and corrected during analysis, documented in `simulation/efficiency_analysis.md`.
+**Signal path:** Arduino PWM pin → 1kΩ resistor → NPN transistor → pull-up resistor / P-MOSFET gate → switch node → inductor/capacitor
 
 ## Debugging Journey
 
@@ -62,12 +36,25 @@ The steady-state voltage error at fixed duty cycle is the direct motivation for 
 - **Diode orientation:** initial flyback diode placement was reversed — caught via schematic inspection, corrected
 - **C2 A/B test:** confirmed experimentally (not assumed) that C2 has no measurable simulated effect, consistent with idealized SPICE physics
 
+## PCB Design
+
+Once the breadboard version was working, I moved the whole design into KiCad and laid out a proper 2-layer PCB — same schematic, same component values, but designed to actually be fabricated rather than wired by hand.
+
+A few things I specifically carried over from what I learned on the breadboard build:
+- **R1's footprint is sized for the real 5W wirewound resistor**, not the small 0.25W footprint I'd have used before learning that lesson the hard way (see "Things I Broke" below)
+- **C2 sits as close as physically possible to M1's source pin** on the board, since that proximity is what actually matters for its decoupling job
+- **Power path traces (VCC, switch node, VOUT) are routed wide** — sized using KiCad's trace width calculator for the real current levels, not left at default thickness
+- Caught a real wiring bug during this process too — an early routing pass accidentally shorted my VOUT node to GND, which I only found by generating and reading the actual KiCad netlist rather than trusting the visual layout. Worth doing that check on any board before sending it off, honestly.
+
+Ready for fabrication next — planning to order through JLCPCB or a local Indian PCB service and hand-assemble it once it arrives.
+
 ## Project Status
 
 - [x] Design, simulation, and efficiency analysis complete
 - [x] Arduino Timer1 PWM + PID implementation
-- [ ] Physical hardware build
-- [ ] Real-hardware measurement and demo
+- [x] Physical hardware build
+- [x] Real-hardware measurement
+- [x] PCB Design 
 
 ## Author
 
