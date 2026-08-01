@@ -1,0 +1,26 @@
+(nets
+  (net (code "1") (name "GND")
+    C1.2  C2.2  D1.2(A)  J2.4  Q1.3(E)  R1.2  R5.2  V1.2
+  )
+  (net (code "2") (name "Net-(C1-Pad1)")  [VOUT]
+    C1.1  L1.2  R1.1  R4.1
+  )
+  (net (code "3") (name "Net-(D1-K)")  [SWITCH_NODE]
+    D1.1(K)  L1.1  M1.2(D)
+  )
+  (net (code "4") (name "Net-(J2-Pin_1)")  [PWM_OUT]
+    J2.1  R3.1
+  )
+  (net (code "5") (name "Net-(J2-Pin_2)")  [FEEDBACK]
+    J2.2  R4.2  R5.1
+  )
+  (net (code "6") (name "Net-(M1-G)")  [GATE_NODE]
+    M1.1(G)  Q1.2(C)  R2.1
+  )
+  (net (code "7") (name "Net-(M1-S)")  [VCC]
+    C2.1  M1.3(S)  R2.2  V1.1
+  )
+  (net (code "8") (name "Net-(Q1-B)")  [NPN_BASE]
+    Q1.1(B)  R3.2
+  )
+)
