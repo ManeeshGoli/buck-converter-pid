@@ -1,21 +1,20 @@
 # Schematic
 
-PSpice/OrCAD Capture schematic for the closed-loop buck converter power stage, including the P-channel MOSFET high-side switch, NPN gate driver, LC output filter, and feedback divider.
+This is the actual circuit — captured in both PSpice (for simulation) and KiCad (for the PCB I'm working on now). Same design, two tools, because I wanted to validate everything before committing to a board layout.
 
-## Files
+## What's here
 
-- `buck_converter_schematic_final.png` — final verified schematic (correct D3 diode orientation, R2 = 1kΩ gate pull-up, C2 decoupling capacitor properly grounded)
-- `netlist.txt` — corresponding PSpice netlist, confirmed clean and verified
+- `netlist.txt` — the verified netlist, confirming every net is wired correctly (no shorts, no floating nodes). I went through a few rounds of catching wiring bugs this way before trusting the design.
 
-## Key Nodes
+## Key nets, if you're trying to follow the wiring
 
-| Net | Description |
+| Net | What it is |
 |---|---|
-| VCC | 12V input rail — V1 positive, R2 pull-up, M1 source, C2 |
-| GND | Common ground reference |
-| PWM_OUT | Arduino PWM signal into gate driver base |
-| GATE_NODE | NPN collector / MOSFET gate, R2 pull-up junction |
-| SWITCH_NODE | MOSFET drain / inductor input / diode cathode |
-| VOUT | Inductor output / capacitor / load / feedback divider |
+| VCC | 12V rail — adapter, MOSFET source, pull-up resistor |
+| GND | Common ground |
+| PWM_OUT | Arduino's switching signal into the driver |
+| GATE_NODE | Between the NPN driver and the MOSFET gate |
+| SWITCH_NODE | MOSFET drain / inductor input / diode |
+| VOUT | The actual regulated output |
 
-See root `README.md` for full design rationale and component values.
+Full design reasoning is in the main README.
