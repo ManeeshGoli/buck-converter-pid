@@ -1,5 +1,7 @@
 # Efficiency Analysis
 
+(Fair warning: getting this number right took way longer than it should have. Full story below.)
+
 ## Summary
 
 | Metric | Value |
@@ -18,7 +20,6 @@ Input power required extra care: PSpice Probe's cursor-table "Avg Y" is simply `
 
 **Fix:** used PSpice's cumulative `AVG()` function with a weighted-subtraction formula to extract a true time-averaged value over the settled window:
 Pin = (Y2×t2 − Y1×t1) / (t2 − t1) = 4.652 W
-
 Reproducible across multiple runs (4.65W, 4.638W, 4.652W).
 
 ## C2 Decoupling Capacitor — A/B Test
@@ -32,4 +33,4 @@ No measurable difference — expected, since C2 sits across an ideal source with
 
 ## Known Limitation
 
-Simulation uses a D1N4148 diode (library substitute) instead of the real 1N5819 Schottky specified for hardware, due to higher series resistance/forward drop at these current levels. **Real hardware efficiency is expected to exceed this 82.5% simulated figure**, closer to the typical 85–95% range for Schottky-based buck converters.
+Simulation uses a D1N4148 diode (library substitute) instead of the real 1N5819 Schottky specified for hardware, due to higher series resistance/forward drop at these current levels. **Real hardware efficiency measured at ~79.6%**, roughly consistent with this expected direction, though breadboard parasitic losses also play a role — see main README for the full comparison.
