@@ -1,61 +1,113 @@
 # Buck Converter with Arduino PID Control
 
-I built a 12V-to-5V switching power converter from scratch — designed it, simulated it in PSpice, broke it a few times on a breadboard, fixed it, and got it running with real closed-loop feedback control. This README walks through the design, the math behind it, and honestly, a lot of the mistakes I made along the way, because I think those are just as worth documenting as the parts that worked.
+This is a 12V-to-5V power converter I designed, simulated, broke a couple times, and eventually got working with real closed-loop control. I'm writing this readme the way I'd actually explain the project to someone, mistakes included, because honestly the mistakes taught me more than the parts that worked on the first try.
 
-## Why I Built This
+## Why
 
-I'm an EE sophomore at USF, and most of my prior work was simulation-only — I'd never actually built a power circuit with my own hands, dealt with a component overheating, or debugged something at 1am wondering why a capacitor just popped. I wanted a project that forced me to bridge circuit design, embedded programming, and control theory into something that actually exists as a physical object, not just a waveform on a screen.
+I'm a sophomore studying EE at USF. Before this, basically everything I'd built existed only in simulation — I'd never had a component actually overheat on me, never had to figure out why a capacitor just popped. I wanted something that would force me out of that, and a buck converter seemed like a good pick: it's the kind of circuit hiding inside almost every charger and power adapter you own, so it felt like something worth actually understanding rather than just simulating. Adding PID control on top gave me an excuse to learn closed-loop feedback too, which shows up everywhere once you start looking — robotics, motor control, basically anything mechatronic.
 
-A buck converter felt like the right scope: small enough to finish, but genuinely representative of what shows up in almost every piece of electronics you own — phone chargers, EV low-voltage systems, drone power distribution. And adding PID control on top of it meant I wasn't just building "a power supply," I was learning the same closed-loop feedback concept that shows up in robotics, motor control, and basically every mechatronics application.
+## What it actually does
 
-## What It Does
-
-Takes a 12V DC input and regulates it down to a steady 5V output, using a P-channel MOSFET as the switch, an Arduino Uno generating the switching signal, and a PID control loop reading the output and correcting it in real time.
+Takes 12V in, puts out a regulated 5V, using a P-channel MOSFET as the switch and an Arduino running both the switching signal and a PID loop that watches the output and corrects it on the fly.
 
 ## Specs
 
 | Parameter | Value |
 |---|---|
 | Input voltage | 12V DC |
-| Target output voltage | 5V DC |
+| Target output | 5V DC |
 | Switching frequency | 31.25 kHz |
-| Load | 10Ω resistor (stand-in for a real device) |
-| Control | Digital PID running on ATmega328P |
+| Load | 10Ω resistor |
+| Control | Digital PID on an ATmega328P |
 
-## The Design
+## Design notes
 
-### Why a P-channel MOSFET, not the more common N-channel
+### The MOSFET choice
 
-This tripped me up early on. A high-side switch (which is what you need here) is easy to drive with an N-channel MOSFET *if* you have a gate driver IC or bootstrap circuit — but I wanted to drive it directly from the Arduino. The problem: once an N-channel MOSFET's source rises up near the 12V rail, a 5V gate signal isn't enough to keep it fully on. A P-channel MOSFET sidesteps this — I drive it through a small NPN transistor acting as a low-side switch, which flips the P-MOSFET's gate voltage relative to its source in the way that actually turns it on.
+I went with a P-channel MOSFET instead of the more typical N-channel, and this actually came from a mistake I almost made. High-side switching with an N-channel MOSFET works fine if you've got a gate driver IC, but I wanted to drive it straight off the Arduino, and once an N-channel MOSFET's source climbs up near 12V, a 5V gate signal just isn't enough anymore to hold it on. P-channel sidesteps the whole problem — I drive it through a small NPN transistor that flips the gate voltage the right way relative to the source.
 
-**Signal path:** Arduino PWM pin → 1kΩ resistor → NPN transistor → pull-up resistor / P-MOSFET gate → switch node → inductor/capacitor
+Signal flow: Arduino PWM pin → 1kΩ resistor → NPN → pull-up/gate node → P-MOSFET → switch node → LC filter → output.
 
-## Debugging Journey
+### Sizing everything
 
-- **Weak gate drive:** 10kΩ pull-up couldn't fully charge MOSFET gate capacitance within the switching OFF window — diagnosed via waveform analysis, fixed by reducing to 1kΩ
-- **Diode orientation:** initial flyback diode placement was reversed — caught via schematic inspection, corrected
-- **C2 A/B test:** confirmed experimentally (not assumed) that C2 has no measurable simulated effect, consistent with idealized SPICE physics
+Inductor's 330µH, sized for 30% ripple current at 31.25kHz. Output cap is 100µF, sized for 1% ripple with some extra margin built in for how bad the ESR is on cheap electrolytics. The flyback diode has to be Schottky — a regular diode's forward drop and switching speed just aren't good enough at this frequency.
 
-## PCB Design
+### Timer1
 
-Once the breadboard version was working, I moved the whole design into KiCad and laid out a proper 2-layer PCB — same schematic, same component values, but designed to actually be fabricated rather than wired by hand.
+`analogWrite()` tops out around 490-980Hz depending on the pin, which is nowhere near fast enough. I ended up configuring Timer1's registers by hand — Fast PWM, no prescaler, TOP set to 511 — to actually hit 31.25kHz. This was probably the single most "sit down and actually read the datasheet" moment of the whole build.
 
-A few things I specifically carried over from what I learned on the breadboard build:
-- **R1's footprint is sized for the real 5W wirewound resistor**, not the small 0.25W footprint I'd have used before learning that lesson the hard way (see "Things I Broke" below)
-- **C2 sits as close as physically possible to M1's source pin** on the board, since that proximity is what actually matters for its decoupling job
-- **Power path traces (VCC, switch node, VOUT) are routed wide** — sized using KiCad's trace width calculator for the real current levels, not left at default thickness
-- Caught a real wiring bug during this process too — an early routing pass accidentally shorted my VOUT node to GND, which I only found by generating and reading the actual KiCad netlist rather than trusting the visual layout. Worth doing that check on any board before sending it off, honestly.
+## Parts list
 
-Ready for fabrication next — planning to order through JLCPCB or a local Indian PCB service and hand-assemble it once it arrives.
+| Ref | Part | Notes |
+|---|---|---|
+| V1 | 12V/2A adapter | Power in |
+| M1 | IRF9540N | The switch |
+| Q1 | 2N2222A | Drives the MOSFET gate |
+| D3 | 1N5819 | Flyback diode |
+| L1 | 330µH, 5.2A | |
+| C1 | 100µF, 25V | Output filter |
+| C2 | 0.1µF | Decoupling, right by M1 |
+| R1 | 10Ω, 5W | The load — had to upgrade this one, more below |
+| R2, R3 | 1kΩ each | Pull-up, base resistor |
+| R4, R5 | 10kΩ, 5.1kΩ | Feedback divider |
 
-## Project Status
+## Simulation (PSpice)
 
-- [x] Design, simulation, and efficiency analysis complete
-- [x] Arduino Timer1 PWM + PID implementation
-- [x] Physical hardware build
-- [x] Real-hardware measurement
-- [x] PCB Design 
+Ran this open-loop first, fixed duty cycle around 41.7%. Output settled near 6.2V, which is higher than the 5V target but that's expected — real components eat into the ideal Vout = D×Vin relationship. Calculated efficiency came out to 82.5% (3.838W out, 4.652W in).
+
+That efficiency number gave me way more trouble than it should have. First attempt gave a result that was physically impossible — input power came out lower than output power, which obviously can't happen. Turned out PSpice's quick "average" cursor readout is just (Max+Min)/2, which works fine for smooth signals but falls apart for something as spiky as a switching converter's input current. Took a while to figure that out. Whole story's in `simulation/efficiency_analysis.md`, and I think it's honestly more interesting than the final number itself.
+
+## Real hardware numbers
+
+Got it running on breadboard with PID actually closing the loop:
+
+| Metric | Value |
+|---|---|
+| Output voltage | 4.37V |
+| Output current | 0.437A |
+| Output power | ~1.91W |
+| Input current | 0.2A |
+| Input power | 2.4W |
+| Efficiency | ~79.6% |
+
+Lower than the simulated 82.5%, which tracks — breadboard connections aren't free, and my MOSFET's legs were too thick for the breadboard so I had to extend them with jumper wires, which definitely doesn't help.
+
+Still haven't fully figured out why it settles at 4.37V instead of 5V — even recalibrated the setpoint using my Arduino's actual measured reference voltage (5.06V, not the assumed 5.00V) and it didn't close the gap. My best guess right now is some resistance between where the feedback divider actually taps the circuit and where I'm physically measuring — didn't get time to chase it all the way down, but it's on the list.
+
+## PCB
+
+Once the breadboard version worked, I moved the design into KiCad and laid out an actual 2-layer board. Same circuit, same values, just meant to be fabricated instead of hand-wired.
+
+A couple things I made sure to carry over from what the breadboard build taught me: R1's footprint is sized for a real 5W wirewound resistor this time, not the tiny 0.25W one I originally (wrongly) used. C2 sits as close as I could physically get it to M1's source pin on the layout. Power traces are routed wide, sized using KiCad's trace calculator instead of just leaving them at default.
+
+Also caught a real bug doing this — an early routing pass had accidentally shorted VOUT straight to ground. Only found it because I pulled the actual netlist and read through it instead of trusting what the layout looked like visually. Good reminder that "looks right" and "is right" aren't the same thing.
+
+Next step is actually getting it fabricated — probably JLCPCB or a local service here in India — and hand-soldering it once it shows up.
+
+## Things I broke along the way
+
+Figured this deserved its own section, because pretending none of this happened would be leaving out most of what I actually learned.
+
+**Burned a resistor the first time I powered it on.** Got the resistance right (10Ω) but never checked the power rating — it needed to dissipate about 3.6W and I had it wired with a standard 0.25W part from an assorted kit. Obvious in hindsight. Always check wattage, not just ohms, for anything in the main current path.
+
+**Popped two capacitors**, back to back. Root cause was a reversed transistor — I'd swapped Emitter and Collector on the NPN, so it never fully saturated, which left the MOSFET in some half-on state that spiked voltage past what the caps could take.
+
+**Gate drive was too weak at first.** Had a 10kΩ pull-up that couldn't charge the MOSFET's gate fast enough in the time available between switching cycles, so the gate never fully swung and the MOSFET basically stayed half-on the whole time. Dropped it to 1kΩ and that fixed it.
+
+**PID oscillation, which is what actually caused the burning smell.** My first tuning attempt had way too much gain — duty cycle was slamming from 0 to max every single cycle. Fixed by cutting Kp by 10x and adding a hard slew-rate limit on how much the duty cycle's allowed to change per loop, regardless of what the PID math says to do.
+
+## Where it's at
+
+- [x] Design and sizing calculations
+- [x] PSpice schematic + simulation
+- [x] Efficiency analysis
+- [x] Timer1 PWM + PID code
+- [x] Working breadboard build
+- [x] Real hardware measurements
+- [x] KiCad PCB design
 
 ## Author
 
-Maneesh Reddy Goli — Electrical Engineering, University of South Florida
+Maneesh Reddy Goli — EE, University of South Florida
+
+*Used AI for updating the documentation.
