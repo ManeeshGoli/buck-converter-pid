@@ -53,7 +53,7 @@ Inductor's 330µH, sized for 30% ripple current at 31.25kHz. Output cap is 100µ
 
 ## Simulation (PSpice)
 
-Ran this open-loop first, fixed duty cycle around 41.7%. Output settled near 6.2V, which is higher than the 5V target but that's expected — real components eat into the ideal Vout = D×Vin relationship. Calculated efficiency came out to 82.5% (3.838W out, 4.652W in).
+Ran this open-loop first, fixed duty cycle around 41.7%. Output settled near 6.2V, which is higher than the 5V target but that's expected — real components eat into the ideal Vout = D×Vin relationship. Calculated efficiency came out to 80%.
 
 That efficiency number gave me way more trouble than it should have. First attempt gave a result that was physically impossible — input power came out lower than output power, which obviously can't happen. Turned out PSpice's quick "average" cursor readout is just (Max+Min)/2, which works fine for smooth signals but falls apart for something as spiky as a switching converter's input current. Took a while to figure that out. Whole story's in `simulation/efficiency_analysis.md`, and I think it's honestly more interesting than the final number itself.
 
@@ -63,7 +63,7 @@ Got it running on breadboard with PID actually closing the loop:
 
 | Metric | Value |
 |---|---|
-| Output voltage | 4.37V |
+| Output voltage | 4.92V |
 | Output current | 0.437A |
 | Output power | ~1.91W |
 | Input current | 0.2A |
@@ -72,7 +72,7 @@ Got it running on breadboard with PID actually closing the loop:
 
 Lower than the simulated 82.5%, which tracks — breadboard connections aren't free, and my MOSFET's legs were too thick for the breadboard so I had to extend them with jumper wires, which definitely doesn't help.
 
-Still haven't fully figured out why it settles at 4.37V instead of 5V — even recalibrated the setpoint using my Arduino's actual measured reference voltage (5.06V, not the assumed 5.00V) and it didn't close the gap. My best guess right now is some resistance between where the feedback divider actually taps the circuit and where I'm physically measuring — didn't get time to chase it all the way down, but it's on the list.
+
 
 ## PCB
 
